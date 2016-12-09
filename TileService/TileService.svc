@@ -1,0 +1,1 @@
+﻿<%@ ServiceHost Language="C#" Debug="true" Service="WCFService.TileService" CodeBehind="TileService.svc.cs" Factory="System.ServiceModel.Activation.WebServiceHostFactory" %>
