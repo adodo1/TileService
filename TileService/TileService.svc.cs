@@ -48,6 +48,7 @@ namespace WCFService
 
     public class TileService : ITileService
     {
+        // HttpRuntime.AppDomainAppPath
         private static string SEARCH_INDEX_PATH = AppDomain.CurrentDomain.BaseDirectory + "TILES/";
         private const int PACKET_SIZE = 128;    // 包大小
 

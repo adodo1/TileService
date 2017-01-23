@@ -28,8 +28,8 @@ namespace WCFService
             row = row * 128;
             col = (int)(col / 128);
             col = col * 128;
-            string rowstr = row.ToString("0000");
-            string colstr = col.ToString("0000");
+            string rowstr = row.ToString("X4");
+            string colstr = col.ToString("X4");
             string filename = string.Format("R{0}C{1}", rowstr, colstr);
             string dirname = string.Format("L{0}", level.ToString("00"));
 
