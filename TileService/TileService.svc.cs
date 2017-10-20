@@ -49,7 +49,7 @@ namespace WCFService
     public class TileService : ITileService
     {
         // HttpRuntime.AppDomainAppPath
-        private static string SEARCH_INDEX_PATH = AppDomain.CurrentDomain.BaseDirectory + "TILES/";
+        private static string SEARCH_INDEX_PATH = AppDomain.CurrentDomain.BaseDirectory + "/";
         private const int PACKET_SIZE = 128;    // 包大小
 
         /// <summary>
@@ -65,7 +65,7 @@ namespace WCFService
             //MemoryStream stream = new MemoryStream(new byte[] { 10, 13, 65 });
             //return stream;
 
-            TileData tileData = new TileData(SEARCH_INDEX_PATH + name);
+            TileData tileData = new TileData(SEARCH_INDEX_PATH + name + "/_alllayers/");
             int row, col, level;
             if (int.TryParse(y, out row) == false ||
                 int.TryParse(x, out col) == false ||
