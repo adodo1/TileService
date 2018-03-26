@@ -1,0 +1,18 @@
+
+-- 创建HEADERS表
+CREATE TABLE [HEADERS] (
+  [NAME] VARCHAR2(50),   --header名称
+  [VAL] VARCHAR2(200)    --header值
+);
+
+-- 创建瓦片表
+CREATE TABLE [TILES] (
+  [ZOOM_LEVEL] INTEGER,  --瓦片等级
+  [TILE_COLUMN] INTEGER, --瓦片列
+  [TILE_ROW] INTEGER,    --瓦片行
+  [TILE_DATA] BLOB       --瓦片数据
+);
+
+-- 创建索引
+CREATE UNIQUE INDEX [INDEX_TILES_XYZ] ON [TILES] ([ZOOM_LEVEL], [TILE_COLUMN], [TILE_ROW]);
+

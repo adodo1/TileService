@@ -1,56 +1,23 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Data.SQLite;
 using System.IO;
+using System.Net;
 using System.Runtime.Serialization;
 using System.ServiceModel;
+using System.ServiceModel.Web;
 using System.Text;
 
 namespace WCFService
 {
-    //# PS:
-    //# 瓦片索引从左上角开始(0,0)
-    //# 先列 再行
-
-    //# 参考:
-    //# https://github.com/andrewmagill/unbundler
-    //# http://www.cnblogs.com/yuantf/p/3320876.html
-    //# https://github.com/sainsb/tilecannon > TileController.cs
-    //# https://github.com/F-Sidney/SharpMapTileLayer > LocalTileCacheLayer.cs
-
-    //# bundle文件
-    //# 前60字节
-    //# 00-07: 固定 0300000000400000
-    //# 08-11: 最大的一块瓦片大小
-    //# 12-15: 固定 05000000
-    //# 16-19: 非空瓦片数量 * 4
-    //# 20-23: 未知 00000000
-    //# 24-27: 文件大小
-    //# 28-31: 未知 00000000
-    //# 32-43: 固定 280000000000000010000000
-    //# 44-47: 开始行
-    //# 48-51: 结束行
-    //# 52-55: 开始列
-    //# 56-59: 结束列
-    //# 中间伪索引 全0
-    //# 4字节 * 128行 * 128列
-    //# 4字节图片大小
-    //# 图片数据
-    //# 4字节图片大小
-    //# 图片数据
-    //# 4字节图片大小
-    //# 图片数据
-    //# ...
-
-    //# bundlx文件
-    //# 前16字节 03000000100000000040000005000000
-    //# 中间每个瓦片对应偏移量 5字节 * 128行 * 128列
-    //# 后16字节 00000000100000001000000000000000
-
+    /// <summary>
+    /// 
+    /// </summary>
     public class TileService : ITileService
     {
-        // HttpRuntime.AppDomainAppPath
-        private static string SEARCH_INDEX_PATH = AppDomain.CurrentDomain.BaseDirectory + "/";
-        private const int PACKET_SIZE = 128;    // 包大小
+        private static string BASE_DIR = AppDomain.CurrentDomain.BaseDirectory + "/Tiles/";
+        private static Dictionary<string, Dictionary<string, string>> _headers = new Dictionary<string, Dictionary<string, string>>();
 
         /// <summary>
         /// 获取瓦片
@@ -62,34 +29,76 @@ namespace WCFService
         /// <returns></returns>
         public Stream GetTile(string name, string x, string y, string z)
         {
-            //MemoryStream stream = new MemoryStream(new byte[] { 10, 13, 65 });
-            //return stream;
-
-            TileData tileData = new TileData(SEARCH_INDEX_PATH + name + "/_alllayers/");
-            int row, col, level;
-            if (int.TryParse(y, out row) == false ||
-                int.TryParse(x, out col) == false ||
-                int.TryParse(z, out level) == false) {
-                // 没有找到影像用空白影像代替
-                return GetNullTile();
+            // 添加响应的头部消息
+            // Content-Type: image/jpeg
+            // Content-Encoding: gzip
+            Dictionary<string, string> headers = GetHeaders(name);
+            if (headers != null) {
+                foreach (KeyValuePair<string, string> header in headers) {
+                    WebOperationContext.Current.OutgoingResponse.Headers[header.Key] = header.Value;
+                }
             }
 
-            // 找到影像
-            byte[] data = tileData.ReadTile(row, col, level);
-            if (data == null || data.Length == 0) return GetNullTile();
-            MemoryStream stream = new MemoryStream(data);
+            //MemoryStream stream = new MemoryStream(new byte[] { 10, 13, 65 });
+            //return stream;
+            int xx, yy, zz;
+            if (int.TryParse(x, out xx) == false ||
+                int.TryParse(y, out yy) == false ||
+                int.TryParse(z, out zz) == false) return null;
+            //
+            string mbtiles = string.Format("{0}{1}.mbtiles", BASE_DIR, name);
+            if (System.IO.File.Exists(mbtiles) == false) return null;
+            SQLiteHelper.SetConnectionString = string.Format("Data Source=\"{0}\"", mbtiles);
+            //
+            string sql = "select TILE_DATA from TILES where ZOOM_LEVEL=@ZOOM_LEVEL and TILE_COLUMN=@TILE_COLUMN and TILE_ROW=@TILE_ROW";
+            SQLiteParameter[] args = new SQLiteParameter[3];
+            args[0] = new SQLiteParameter("@ZOOM_LEVEL", zz);
+            args[1] = new SQLiteParameter("@TILE_COLUMN", yy);
+            args[2] = new SQLiteParameter("@TILE_ROW", xx);
+            object value = SQLiteHelper.ExecuteScalar(CommandType.Text, sql, args);
+            if (value == null || Convert.IsDBNull(value)) return null;
+            //
+            byte[] data = (byte[])value;
+            if (data[0] == 0x1f && data[1] == 0x8b) {
+                // 如果是压缩数据就算没有headers定义也添加一条GZIP的头部
+                // 浏览器前端回去解压的
+                WebOperationContext.Current.OutgoingResponse.Headers["Content-Encoding"] = "gzip";
+            }
+            //
+            MemoryStream stream = new MemoryStream((byte[])value);
             return stream;
         }
         /// <summary>
-        /// 返回空白的影像
+        /// 从mbtile数据库中读取读取headers表
+        /// 如果读取失败返回空
         /// </summary>
+        /// <param name="name"></param>
         /// <returns></returns>
-        private Stream GetNullTile()
+        private Dictionary<string, string> GetHeaders(string name)
         {
-            string resourceName = GetType().Namespace + ".res.null.png";
-            Stream stream = GetType().Assembly.GetManifestResourceStream(resourceName);
-            return stream;
+            Dictionary<string, string> result = new Dictionary<string, string>();
+            try {
+                if (_headers.TryGetValue(name, out result)) return result;
+                // 
+                string mbtiles = string.Format("{0}{1}.mbtiles", BASE_DIR, name);
+                if (System.IO.File.Exists(mbtiles) == false) return null;
+                SQLiteHelper.SetConnectionString = string.Format("Data Source=\"{0}\"", mbtiles);
+                string sql = "select NAME, VAL from HEADERS";
+                DataSet dataset = SQLiteHelper.ExecuteDataset(CommandType.Text, sql);
+                foreach (DataRow row in dataset.Tables[0].Rows) {
+                    string n = Convert.ToString(row[0]);
+                    string v = Convert.ToString(row[1]);
+                    result[n] = v;
+                }
+                _headers[name] = result;
+                return result;
+            }
+            catch (Exception ex) {
+                _headers[name] = result;
+                return result;
+            }
         }
+
 
 
     }
